@@ -11,8 +11,6 @@ class BarcodeScannerController: UIViewController, AVCaptureMetadataOutputObjects
                                       AVMetadataObject.ObjectType.ean8,
                                       AVMetadataObject.ObjectType.ean13,
                                       AVMetadataObject.ObjectType.itf14,
-                                      AVMetadataObject.ObjectType.dataMatrix,
-                                      AVMetadataObject.ObjectType.qr,
                                       AVMetadataObject.ObjectType.upce]
     
     private var barcodeStream: FlutterEventSink?=nil
@@ -71,6 +69,9 @@ class BarcodeScannerController: UIViewController, AVCaptureMetadataOutputObjects
         case "closeCamera":
             close()
             result(nil)
+        case "refocus":
+            refocus()
+            result(nil)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -86,6 +87,19 @@ class BarcodeScannerController: UIViewController, AVCaptureMetadataOutputObjects
             guard let captureDevice = deviceDiscoverySession.devices.first else {
                 barcodeStream?(FlutterError(code: "native_scanner_failed", message: "Failed to get the camera device", details: nil))
                 return
+            }
+
+            // ✨ Налаштування фокуса
+            do {
+                try captureDevice.lockForConfiguration()
+                if captureDevice.isFocusModeSupported(.continuousAutoFocus) {
+                    captureDevice.focusMode = .continuousAutoFocus
+                } else if captureDevice.isFocusModeSupported(.autoFocus) {
+                    captureDevice.focusMode = .autoFocus
+                }
+                captureDevice.unlockForConfiguration()
+            } catch {
+                print("⚠️ Не вдалося налаштувати фокус: \(error)")
             }
             
             // Get an instance of the AVCaptureDeviceInput class using the previous device object.
@@ -175,10 +189,6 @@ class BarcodeScannerController: UIViewController, AVCaptureMetadataOutputObjects
             return BarcodeFormats.EAN_13
         case AVMetadataObject.ObjectType.itf14:
             return BarcodeFormats.ITF
-        case AVMetadataObject.ObjectType.dataMatrix:
-            return BarcodeFormats.DATAMATRIX
-        case AVMetadataObject.ObjectType.qr:
-            return BarcodeFormats.QR_CODE
         case AVMetadataObject.ObjectType.upce:
             return BarcodeFormats.UPC_E
         default:
@@ -203,6 +213,22 @@ class BarcodeScannerController: UIViewController, AVCaptureMetadataOutputObjects
             device.unlockForConfiguration()
         } catch {
             print(error)
+        }
+    }
+
+    func refocus() {
+        guard let device = getCaptureDeviceFromCurrentSession(session: captureSession) else {
+            return
+        }
+
+        do {
+            try device.lockForConfiguration()
+            if device.isFocusModeSupported(.autoFocus) {
+                device.focusMode = .autoFocus
+            }
+            device.unlockForConfiguration()
+        } catch {
+            print("⚠️ Error refocusing: \(error)")
         }
     }
     

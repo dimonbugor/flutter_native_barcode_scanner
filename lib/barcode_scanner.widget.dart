@@ -32,12 +32,6 @@ class BarcodeScannerWidget extends StatefulWidget {
   /// This function will be called when a barcode is detected.
   final Function(Barcode barcode)? onBarcodeDetected;
 
-  /// This function will be called when a bloc of text is detected.
-  final Function(String textResult)? onTextDetected;
-
-  /// This function will be called when a bloc MRZ is detected.
-  final Function(String mrz, Uint8List image)? onMrzDetected;
-
   final Function(int? progress)? onScanProgress;
 
   final Function(dynamic error) onError;
@@ -49,12 +43,10 @@ class BarcodeScannerWidget extends StatefulWidget {
         this.orientation = CameraOrientation.portrait,
         this.scannerType = ScannerType.barcode,
         this.onBarcodeDetected,
-        this.onTextDetected,
-        this.onMrzDetected,
         this.onScanProgress,
         required this.onError,
       })
-      : assert(onBarcodeDetected != null || onTextDetected != null),
+      : assert(onBarcodeDetected != null),
         super(key: key);
 
   @override
@@ -86,11 +78,9 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
       }
 
       if (widget.onBarcodeDetected != null && widget.scannerType == ScannerType.barcode) {
-
         final format = BarcodeFormat.unserialize(event['format']);
 
         if (format != null && event['barcode'] != null) {
-
           await BarcodeScanner.stopScanner();
 
           await widget.onBarcodeDetected!(Barcode(format: format, value: event['barcode'] as String));
@@ -98,27 +88,9 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
           if (!widget.stopScanOnBarcodeDetected) {
             BarcodeScanner.startScanner();
           }
-
         } else if (event["progress"] == null) {
           widget.onError(const FormatException('Barcode not found'));
         }
-
-      } else if (widget.onTextDetected != null && widget.scannerType == ScannerType.text) {
-
-        if (event['text'] != null) {
-          await widget.onTextDetected!(event['text'] as String);
-        } else if (event["progress"] == null) {
-          widget.onError(const FormatException('Text not found'));
-        }
-
-      } else if (widget.onMrzDetected != null && widget.scannerType == ScannerType.mrz) {
-
-        if (event['mrz'] != null && event["img"] != null) {
-          await widget.onMrzDetected!(event['mrz'] as String, Uint8List.fromList(event["img"]));
-        } else if (event["progress"] == null) {
-          widget.onError(const FormatException('MRZ not found'));
-        }
-
       }
     }, onError: (dynamic error) {
       widget.onError(error);

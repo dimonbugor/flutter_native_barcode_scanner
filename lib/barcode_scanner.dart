@@ -17,12 +17,9 @@ enum BarcodeFormat {
   ean13,
   itf,
   codabar,
-  dataMatrix,
-  qrCode,
   upca,
   upce;
 
-  /// @nodoc
   static BarcodeFormat? unserialize(int constant) {
     switch (constant) {
       case _formatCode39:
@@ -39,10 +36,6 @@ enum BarcodeFormat {
         return BarcodeFormat.itf;
       case _formatCodabar:
         return BarcodeFormat.codabar;
-      case _formatDataMatrix:
-        return BarcodeFormat.dataMatrix;
-      case _formatQrCode:
-        return BarcodeFormat.qrCode;
       case _formatUpca:
         return BarcodeFormat.upca;
       case _formatUpce:
@@ -69,7 +62,7 @@ class Barcode {
 enum CameraOrientation { portrait, landscapeLeft, landscapeRight }
 
 /// Defines the type of scanned data
-enum ScannerType { barcode, text, mrz }
+enum ScannerType { barcode }
 
 /// Defines if the camera is at the front or the back of the device
 enum CameraSelector { front, back }
@@ -81,6 +74,8 @@ abstract class BarcodeScanner {
 
   /// This allows to toggle the flashlight.
   static Future toggleFlashlight() => _channel.invokeMethod('toggleTorch');
+
+  static Future refocus() => _channel.invokeMethod('refocus');
 
   /// Go from back camera to front or vice versa.
   static Future flipCamera() => _channel.invokeMethod('flipCamera');
@@ -108,7 +103,5 @@ const int _formatEan8 = 3;
 const int _formatEan13 = 4;
 const int _formatItf = 5;
 const int _formatCodabar = 6;
-const int _formatDataMatrix = 7;
-const int _formatQrCode = 8;
 const int _formatUpca = 9;
 const int _formatUpce = 10;
