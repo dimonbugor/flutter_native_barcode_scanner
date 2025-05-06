@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import AVFoundation
 
 public class BarcodeScannerPlugin: NSObject, FlutterPlugin {
     
@@ -26,6 +27,15 @@ public class BarcodeScannerPlugin: NSObject, FlutterPlugin {
     }
     
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        cameraController.handle(call, result: result)
+        switch call.method {
+            case "requestCameraPermission":
+                AVCaptureDevice.requestAccess(for: .video) { granted in
+                    DispatchQueue.main.async {
+                        result(granted)
+                    }
+                }
+            default:
+                cameraController.handle(call, result: result)
+        }
     }
 }

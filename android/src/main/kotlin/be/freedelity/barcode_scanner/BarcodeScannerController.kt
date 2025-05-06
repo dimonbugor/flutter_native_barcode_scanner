@@ -7,10 +7,8 @@ import BarcodeFormats
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Point
-import android.graphics.Rect
 import android.hardware.camera2.CameraAccessException
+import android.hardware.camera2.CaptureRequest
 import android.util.Log
 import android.view.View
 import android.view.ViewTreeObserver
@@ -19,28 +17,26 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
-import be.freedelity.barcode_scanner.util.BarcodeScannerUtil
-import be.freedelity.barcode_scanner.util.MrzUtil
+import androidx.camera.camera2.interop.Camera2Interop
 import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.Text
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.TextRecognizer
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import kotlinx.coroutines.runBlocking
-import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
 
-
-class BarcodeScannerController(private val activity: Activity, messenger: BinaryMessenger, methodChannelName: String, scanEventChannelName: String) : MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
+class BarcodeScannerController(
+    private val activity: Activity,
+    messenger: BinaryMessenger,
+    methodChannelName: String,
+    scanEventChannelName: String
+) : MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
 
     private var methodChannel: MethodChannel = MethodChannel(messenger, methodChannelName)
     private var scanStreamChannel: EventChannel = EventChannel(messenger, scanEventChannelName)
@@ -51,18 +47,21 @@ class BarcodeScannerController(private val activity: Activity, messenger: Binary
     private lateinit var context: Context
 
     private val imageAnalysis: ImageAnalysis = ImageAnalysis.Builder().build()
-
     private var cameraParams: Map<String?, Any?>? = null
     private var camera: Camera? = null
 
     private var isScannerActive: Boolean = false
     private var torchEnabled: Boolean = false
-
     private var scanSucceedTimestamp: Long = System.currentTimeMillis()
+    private var scannerView: BarcodeScannerView? = null
 
     init {
         methodChannel.setMethodCallHandler(this)
         scanStreamChannel.setStreamHandler(this)
+    }
+
+    fun setScannerView(view: BarcodeScannerView) {
+        scannerView = view
     }
 
     fun stopListening() {
@@ -80,101 +79,78 @@ class BarcodeScannerController(private val activity: Activity, messenger: Binary
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         runBlocking {
-            when (call.method) {
-                "toggleTorch" -> {
-                    try {
+            try {
+                when (call.method) {
+                    "requestCameraPermission" -> {
+                        scannerView?.requestCameraPermission()
+                        result.success(null)
+                    }
+                    "toggleTorch" -> {
                         torchEnabled = !torchEnabled
                         camera?.cameraControl?.enableTorch(torchEnabled)
                         result.success(null)
-                    } catch (e: Exception) {
-                        handleException(e, result)
                     }
-                }
-                "flipCamera" -> {
-                    try {
-                        if (cameraParams != null) {
 
-                            val map: MutableMap<String?, Any?> = cameraParams!!.toMutableMap()
-                            if (map["camera_selector"] == "front")
-                                map["camera_selector"] = "back"
-                            else
-                                map["camera_selector"] = "front"
-
+                    "flipCamera" -> {
+                        cameraParams?.let {
+                            val map = it.toMutableMap()
+                            map["camera_selector"] =
+                                if (map["camera_selector"] == "front") "back" else "front"
                             startCamera(map)
                         }
                         result.success(null)
-                    } catch (e: Exception) {
-                        handleException(e, result)
                     }
-                }
-                "startScanner" -> {
-                    try {
+
+                    "startScanner" -> {
                         if (!isScannerActive) {
                             startScanner()
                         }
                         result.success(null)
-                    } catch (e: Exception) {
-                        handleException(e, result)
                     }
-                }
-                "stopScanner" -> {
-                    try {
+
+                    "stopScanner" -> {
                         if (isScannerActive) {
                             isScannerActive = false
                             imageAnalysis.clearAnalyzer()
                         }
                         result.success(null)
-                    } catch (e: Exception) {
-                        handleException(e, result)
                     }
-                }
-                "closeCamera" -> {
-                    try {
+
+                    "closeCamera" -> {
                         val cameraProvider = ProcessCameraProvider.getInstance(context).get()
                         cameraProvider.unbindAll()
-
                         result.success(null)
-                    } catch (e: Exception) {
-                        handleException(e, result)
                     }
-                }
-                else -> result.notImplemented()
-            }
 
+                    else -> result.notImplemented()
+                }
+            } catch (e: Exception) {
+                handleException(e, result)
+            }
         }
     }
 
-    fun startCamera(params: Map<String?, Any?>?, viewContext: Context? = null, viewPreviewView: PreviewView? = null, viewCameraExecutor: ExecutorService? = null) {
-
-        if (viewPreviewView != null)
-            previewView = viewPreviewView
-        if (viewContext != null)
-            context = viewContext
-        if (viewCameraExecutor != null)
-            executor = viewCameraExecutor
+    fun startCamera(
+        params: Map<String?, Any?>?,
+        viewContext: Context? = null,
+        viewPreviewView: PreviewView? = null,
+        viewCameraExecutor: ExecutorService? = null
+    ) {
+        if (viewPreviewView != null) previewView = viewPreviewView
+        if (viewContext != null) context = viewContext
+        if (viewCameraExecutor != null) executor = viewCameraExecutor
 
         cameraParams = params
-
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
         cameraProviderFuture.addListener({
-
-            if (cameraParams?.get("start_scanning") == true) {
-                startScanner()
-            }
-
             try {
-
                 val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
                 cameraProvider.unbindAll()
 
-                val cameraSelector : CameraSelector = when (cameraParams?.get("camera_selector")) {
+                val cameraSelector = when (cameraParams?.get("camera_selector")) {
                     "front" -> CameraSelector.DEFAULT_FRONT_CAMERA
                     else -> CameraSelector.DEFAULT_BACK_CAMERA
-                }
-
-                val preview = Preview.Builder().build().also {
-                    it.setSurfaceProvider(previewView.surfaceProvider)
                 }
 
                 val builder = Preview.Builder()
@@ -183,27 +159,33 @@ class BarcodeScannerController(private val activity: Activity, messenger: Binary
                     CaptureRequest.CONTROL_AF_MODE,
                     CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
                 )
+
                 val preview = builder.build().also {
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
 
-                camera = cameraProvider.bindToLifecycle(activity as LifecycleOwner, cameraSelector, preview, imageAnalysis)
+                camera = cameraProvider.bindToLifecycle(
+                    activity as LifecycleOwner,
+                    cameraSelector,
+                    preview,
+                    imageAnalysis
+                )
 
                 configureAutofocus()
 
-            } catch(exc: Exception) {
+                if (cameraParams?.get("start_scanning") == true) {
+                    startScanner()
+                }
+
+            } catch (exc: Exception) {
                 eventSink?.error("native_scanner_failed", "Camera binding failed", exc.message.orEmpty())
             }
-
         }, ContextCompat.getMainExecutor(context))
     }
 
     private fun startScanner() {
         isScannerActive = true
 
-        var barcodeScanner: BarcodeScanner? = null
-
-        Log.i("native_scanner", "Start for barcode scanner")
         val options = BarcodeScannerOptions.Builder().setBarcodeFormats(
             Barcode.FORMAT_CODE_39,
             Barcode.FORMAT_CODE_93,
@@ -215,44 +197,35 @@ class BarcodeScannerController(private val activity: Activity, messenger: Binary
             Barcode.FORMAT_UPC_A,
             Barcode.FORMAT_UPC_E
         ).build()
-        barcodeScanner = BarcodeScanning.getClient(options)
+        val barcodeScanner = BarcodeScanning.getClient(options)
 
         imageAnalysis.setAnalyzer(executor) { imageProxy ->
-            processImageProxy(imageProxy, barcodeScanner, textRecognizer)
+            processImageProxy(imageProxy, barcodeScanner)
         }
     }
 
     private fun handleException(exception: Exception, result: MethodChannel.Result) {
         if (exception is CameraAccessException) {
             result.error("CameraAccess", exception.message, null)
-            return
+        } else {
+            result.error("Exception", exception.message, null)
         }
-        throw (exception as RuntimeException)
     }
 
     private fun configureAutofocus() {
         previewView.afterMeasured {
             val factory = previewView.meteringPointFactory
-            val yCenter = previewView.height / 2f
             val xCenter = previewView.width / 2f
+            val yCenter = previewView.height / 2f
             val autofocusPoint = factory.createPoint(xCenter, yCenter, .01f)
+
             try {
                 val autofocusAction = FocusMeteringAction.Builder(autofocusPoint).apply {
                     setAutoCancelDuration(300, TimeUnit.MILLISECONDS)
-                    if (cameraParams?.get("scanner_type") == "barcode") {
-                        addPoint(factory.createPoint(xCenter - 9f, yCenter, .01f))
-                        addPoint(factory.createPoint(xCenter - 6f, yCenter, .01f))
-                        addPoint(factory.createPoint(xCenter - 3f, yCenter, .01f))
-                        addPoint(factory.createPoint(xCenter + 3f, yCenter, .01f))
-                        addPoint(factory.createPoint(xCenter + 6f, yCenter, .01f))
-                        addPoint(factory.createPoint(xCenter + 9f, yCenter, .01f))
-                    } else {
-                        addPoint(factory.createPoint(0f, yCenter, .01f))
-                        addPoint(factory.createPoint(previewView.width / 1f, yCenter, .01f))
-                    }
                 }.build()
-                camera!!.cameraControl.startFocusAndMetering(autofocusAction)
-            } catch( e: CameraInfoUnavailableException) {
+
+                camera?.cameraControl?.startFocusAndMetering(autofocusAction)
+            } catch (e: CameraInfoUnavailableException) {
                 Log.e("native_scanner", "cannot access camera", e)
             }
         }
@@ -274,7 +247,7 @@ class BarcodeScannerController(private val activity: Activity, messenger: Binary
     }
 
     private fun convertBarcodeType(mlKitType: Int): Int {
-        return when(mlKitType) {
+        return when (mlKitType) {
             Barcode.FORMAT_CODE_39 -> BarcodeFormats.CODE_39
             Barcode.FORMAT_CODE_93 -> BarcodeFormats.CODE_93
             Barcode.FORMAT_CODE_128 -> BarcodeFormats.CODE_128
@@ -282,55 +255,43 @@ class BarcodeScannerController(private val activity: Activity, messenger: Binary
             Barcode.FORMAT_EAN_13 -> BarcodeFormats.EAN_13
             Barcode.FORMAT_ITF -> BarcodeFormats.ITF
             Barcode.FORMAT_CODABAR -> BarcodeFormats.CODABAR
-            Barcode.FORMAT_UPC_A -> BarcodeFormats.UPCA_A
+            Barcode.FORMAT_UPC_A -> BarcodeFormats.UPC_A
             Barcode.FORMAT_UPC_E -> BarcodeFormats.UPC_E
             else -> -1
         }
     }
 
-    private fun getScannerProcessInterval(): Int {
-        return if (cameraParams?.get("scanner_type") == "mrz") {
-            100
-        } else if (cameraParams?.get("scanner_type") == "text") {
-            500
-        } else {
-            2000
-        }
-    }
-
     @SuppressLint("UnsafeOptInUsageError")
-    private fun processImageProxy(imageProxy: ImageProxy, barcodeScanner: BarcodeScanner?) {
-
-        assert(barcodeScanner != null)
-
+    private fun processImageProxy(imageProxy: ImageProxy, barcodeScanner: BarcodeScanner) {
         val mediaImage = imageProxy.image ?: return
 
-        if (System.currentTimeMillis() > (scanSucceedTimestamp + getScannerProcessInterval())) {
+        if (System.currentTimeMillis() > (scanSucceedTimestamp + 2000)) {
+            val inputImage =
+                InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
 
-            val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-
-            barcodeScanner!!.process(inputImage)
+            barcodeScanner.process(inputImage)
                 .addOnSuccessListener { barcodeList ->
-
-                    val barcode: Barcode? = barcodeList.getOrNull(0)
-
-                    if (barcode != null) {
+                    barcodeList.firstOrNull()?.let { barcode ->
                         scanSucceedTimestamp = System.currentTimeMillis()
-                        eventSink?.success(mapOf(
-                            "barcode" to barcode.displayValue,
-                            "format" to convertBarcodeType(barcode.format)
-                        ))
+                        eventSink?.success(
+                            mapOf(
+                                "barcode" to barcode.displayValue,
+                                "format" to convertBarcodeType(barcode.format)
+                            )
+                        )
                     }
-
                 }
                 .addOnFailureListener {
-                    eventSink?.error("native_scanner_failed", "An error occurs while processing image proxy for barcode scanner", it.message.orEmpty())
+                    eventSink?.error(
+                        "native_scanner_failed",
+                        "Error while processing image for barcode scanner",
+                        it.message.orEmpty()
+                    )
                 }
                 .addOnCompleteListener {
                     imageProxy.image?.close()
                     imageProxy.close()
                 }
-
         } else {
             imageProxy.image?.close()
             imageProxy.close()

@@ -47,6 +47,10 @@ internal class BarcodeScannerView(activity: Activity, barcodeScannerController: 
             ).toTypedArray()
     }
 
+    fun requestCameraPermission() {
+        ActivityCompat.requestPermissions(activity, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+    }
+
     private fun allPermissionsGranted(context: Context) = REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
     }

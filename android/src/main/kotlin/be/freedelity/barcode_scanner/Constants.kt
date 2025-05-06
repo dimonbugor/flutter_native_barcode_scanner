@@ -21,4 +21,5 @@ object BarcodeFormats {
     const val QR_CODE : Int = 8;
     const val UPCA_A : Int = 9;
     const val UPC_E : Int = 10;
+    const val UPC_A : Int = 12;
 }

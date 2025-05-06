@@ -36,17 +36,20 @@ class BarcodeScannerWidget extends StatefulWidget {
 
   final Function(dynamic error) onError;
 
-  const BarcodeScannerWidget(
-      {Key? key, this.cameraSelector = CameraSelector.back,
-        this.startScanning = true,
-        this.stopScanOnBarcodeDetected = true,
-        this.orientation = CameraOrientation.portrait,
-        this.scannerType = ScannerType.barcode,
-        this.onBarcodeDetected,
-        this.onScanProgress,
-        required this.onError,
-      })
-      : assert(onBarcodeDetected != null),
+  final Function(bool status)? onPermissionStatus;
+
+  const BarcodeScannerWidget({
+    Key? key,
+    this.cameraSelector = CameraSelector.back,
+    this.startScanning = true,
+    this.stopScanOnBarcodeDetected = true,
+    this.orientation = CameraOrientation.portrait,
+    this.scannerType = ScannerType.barcode,
+    this.onBarcodeDetected,
+    this.onScanProgress,
+    this.onPermissionStatus,
+    required this.onError,
+  })  : assert(onBarcodeDetected != null),
         super(key: key);
 
   @override
@@ -55,14 +58,39 @@ class BarcodeScannerWidget extends StatefulWidget {
 
 class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
   static const String platformViewChannel = 'be.freedelity/native_scanner/view';
-  static const EventChannel eventChannel = EventChannel('be.freedelity/native_scanner/imageStream');
+  static const EventChannel eventChannel =
+      EventChannel('be.freedelity/native_scanner/imageStream');
+  static const MethodChannel _methodChannel =
+      MethodChannel('be.freedelity/native_scanner/method');
 
   late Map<String, dynamic> creationParams;
   late StreamSubscription eventSubscription;
 
+  Future<String> getCameraPermissionStatus() async {
+    try {
+      return await _methodChannel
+              .invokeMethod<String>('getCameraPermissionStatus') ??
+          'unknown';
+    } catch (e) {
+      return 'error';
+    }
+  }
+
+  Future<void> requestCameraPermissionFromNative() async {
+    try {
+      final bool granted =
+          await _methodChannel.invokeMethod('requestCameraPermission');
+      widget.onPermissionStatus?.call(granted);
+    } catch (e) {
+      widget.onError(e);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+
+    requestCameraPermissionFromNative();
 
     creationParams = {
       'orientation': widget.orientation.name,
@@ -71,19 +99,21 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
       'start_scanning': widget.startScanning,
     };
 
-    eventSubscription = eventChannel.receiveBroadcastStream().listen((dynamic event) async {
-
+    eventSubscription =
+        eventChannel.receiveBroadcastStream().listen((dynamic event) async {
       if (widget.onScanProgress != null) {
         widget.onScanProgress!(event["progress"] as int?);
       }
 
-      if (widget.onBarcodeDetected != null && widget.scannerType == ScannerType.barcode) {
+      if (widget.onBarcodeDetected != null &&
+          widget.scannerType == ScannerType.barcode) {
         final format = BarcodeFormat.unserialize(event['format']);
 
         if (format != null && event['barcode'] != null) {
           await BarcodeScanner.stopScanner();
 
-          await widget.onBarcodeDetected!(Barcode(format: format, value: event['barcode'] as String));
+          await widget.onBarcodeDetected!(
+              Barcode(format: format, value: event['barcode'] as String));
 
           if (!widget.stopScanOnBarcodeDetected) {
             BarcodeScanner.startScanner();
@@ -102,7 +132,8 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
     try {
       eventSubscription.cancel();
     } on PlatformException catch (e) {
-      debugPrint("Intercept event subscription cancel exception on scanner disposed without stream initialized yet : $e");
+      debugPrint(
+          "Intercept event subscription cancel exception on scanner disposed without stream initialized yet : $e");
     }
     BarcodeScanner.closeCamera();
     super.dispose();
@@ -111,7 +142,11 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
   @override
   Widget build(BuildContext context) {
     if (Platform.isIOS) {
-      return UiKitView(viewType: platformViewChannel, layoutDirection: TextDirection.ltr, creationParams: creationParams, creationParamsCodec: const StandardMessageCodec());
+      return UiKitView(
+          viewType: platformViewChannel,
+          layoutDirection: TextDirection.ltr,
+          creationParams: creationParams,
+          creationParamsCodec: const StandardMessageCodec());
     }
 
     return Stack(children: [
@@ -120,7 +155,8 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
           surfaceFactory: (context, controller) {
             return AndroidViewSurface(
               controller: controller as AndroidViewController,
-              gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
+              gestureRecognizers: const <Factory<
+                  OneSequenceGestureRecognizer>>{},
               hitTestBehavior: PlatformViewHitTestBehavior.opaque,
             );
           },
@@ -136,7 +172,8 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
                 })
               ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated);
           }),
-      const Positioned.fill(child: ModalBarrier(dismissible: false, color: Colors.transparent))
+      const Positioned.fill(
+          child: ModalBarrier(dismissible: false, color: Colors.transparent))
     ]);
   }
 }
