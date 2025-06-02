@@ -12,7 +12,8 @@ import io.flutter.plugin.platform.PlatformViewFactory
 class BarcodeScannerViewFactory(private val activity: Activity, private val barcodeScannerController: BarcodeScannerController) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
 
     override fun create(context: Context?, viewId: Int, args: Any?): PlatformView {
-        barcodeScannerController.setScannerView(this)
-        return BarcodeScannerView(activity, barcodeScannerController, context!!, args as Map<String?, Any?>?)
+        val barcodeScannerView: BarcodeScannerView = BarcodeScannerView(activity, barcodeScannerController, context!!, args as Map<String?, Any?>?)
+        barcodeScannerController.setScannerView(barcodeScannerView)
+        return barcodeScannerView
     }
 }

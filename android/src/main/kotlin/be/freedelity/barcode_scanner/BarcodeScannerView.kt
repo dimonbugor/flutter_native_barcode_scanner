@@ -15,7 +15,7 @@ import io.flutter.plugin.platform.PlatformView
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-internal class BarcodeScannerView(activity: Activity, barcodeScannerController: BarcodeScannerController, context: Context, creationParams: Map<String?, Any?>?) : PlatformView {
+class BarcodeScannerView(private val activity: Activity, private val barcodeScannerController: BarcodeScannerController, context: Context, creationParams: Map<String?, Any?>?) : PlatformView {
 
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val previewView: PreviewView = PreviewView(context)
