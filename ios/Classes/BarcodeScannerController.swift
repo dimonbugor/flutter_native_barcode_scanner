@@ -72,6 +72,14 @@ class BarcodeScannerController: UIViewController, AVCaptureMetadataOutputObjects
         case "refocus":
             refocus()
             result(nil)
+        case "updateOrientation":
+            if let args = call.arguments as? [String: Any],
+            let newOrientation = args["orientation"] as? String {
+                self.updateOrientation(newOrientation)
+                result(nil)
+            } else {
+                result(FlutterError(code: "invalid_arguments", message: "Missing orientation", details: nil))
+            }
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -122,9 +130,11 @@ class BarcodeScannerController: UIViewController, AVCaptureMetadataOutputObjects
             if (self.orientation == "portrait" || self.orientation == nil) {
                 videoPreviewLayer?.connection?.videoOrientation = .portrait
             } else if (self.orientation == "landscapeLeft") {
-                videoPreviewLayer?.connection?.videoOrientation = .landscapeLeft
-            } else if (self.orientation == "landscapeRight") {
                 videoPreviewLayer?.connection?.videoOrientation = .landscapeRight
+            } else if (self.orientation == "landscapeRight") {
+                videoPreviewLayer?.connection?.videoOrientation = .landscapeLeft
+            } else if self.orientation == "portraitDown" {
+                videoPreviewLayer?.connection?.videoOrientation = .portraitUpsideDown
             }
             
             view.contentMode = UIView.ContentMode.scaleAspectFill
@@ -142,6 +152,22 @@ class BarcodeScannerController: UIViewController, AVCaptureMetadataOutputObjects
             // If any error occurs, simply print it out and don't continue any more.
             print(error)
             return
+        }
+    }
+
+    @objc func updateOrientation(_ orientation: String) {
+    DispatchQueue.main.async {
+            if orientation == "portrait" {
+                self.videoPreviewLayer?.connection?.videoOrientation = .portrait
+            } else if orientation == "landscapeLeft" {
+                self.videoPreviewLayer?.connection?.videoOrientation = .landscapeRight
+            } else if orientation == "landscapeRight" {
+                self.videoPreviewLayer?.connection?.videoOrientation = .landscapeLeft
+            } else if orientation == "portraitDown" {
+                self.videoPreviewLayer?.connection?.videoOrientation = .portraitUpsideDown
+            }
+            
+            self.videoPreviewLayer?.frame = self.view.bounds
         }
     }
 

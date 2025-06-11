@@ -77,6 +77,16 @@ abstract class BarcodeScanner {
 
   static Future refocus() => _channel.invokeMethod('refocus');
 
+  static Future updateCameraOrientation(String orientation) async {
+    try {
+      await _channel.invokeMethod('updateOrientation', {
+        'orientation': orientation,
+      });
+    } catch (e) {
+      throw Exception('Failed to update camera orientation: $e');
+    }
+  }
+
   /// Go from back camera to front or vice versa.
   static Future flipCamera() => _channel.invokeMethod('flipCamera');
 
